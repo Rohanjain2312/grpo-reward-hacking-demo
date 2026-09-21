@@ -12,7 +12,9 @@ STAGE=${1:-}
 if [ -z "$STAGE" ]; then
   echo "usage: run_on_hf_jobs.sh <pilot|baseline|fixed_kl|judge>" >&2; exit 1
 fi
-FLAVOR=${FLAVOR:-a100-large}
+# The judge is a single forward pass per sample, so it does not need an A100.
+if [ "${1:-}" = "judge" ]; then DEFAULT_FLAVOR=l4x1; else DEFAULT_FLAVOR=a100-large; fi
+FLAVOR=${FLAVOR:-$DEFAULT_FLAVOR}
 IMAGE=${IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
 REPO=${REPO:-https://github.com/Rohanjain2312/grpo-reward-hacking-demo.git}
 BRANCH=${BRANCH:-main}
