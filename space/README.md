@@ -7,7 +7,7 @@ sdk: gradio
 app_file: app.py
 pinned: false
 license: apache-2.0
-short_description: Compare a reward-hacked GRPO policy with the same run plus a KL penalty
+short_description: Reward-hacked vs KL-regularised GRPO, side by side
 models:
   - Qwen/Qwen2.5-0.5B-Instruct
   - lvwerra/distilbert-imdb
