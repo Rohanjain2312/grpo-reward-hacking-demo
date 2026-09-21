@@ -52,3 +52,30 @@ def distinct_2(texts) -> float:
         bigrams = list(zip(words[:-1], words[1:]))
         ratios.append(len(set(bigrams)) / len(bigrams))
     return float(sum(ratios) / len(ratios)) if ratios else float("nan")
+
+
+def cross_sample_diversity(texts, prefix_words: int = 4) -> dict:
+    """Diversity *across* the eval set, not within a single completion.
+
+    Added after observing the actual failure mode: the gamed policy converges on one
+    high-scoring opening template ("Absolutely captivating and deeply ...") while each
+    individual completion stays internally varied. Per-completion `distinct_2` is ~1.0
+    throughout that collapse, because it never compares one sample to another.
+
+    Computed post-hoc from logged samples, so it needs no retraining.
+    """
+    texts = [t for t in texts if t.strip()]
+    if not texts:
+        return {"corpus_distinct_2": float("nan"), "unique_prefix_ratio": float("nan")}
+
+    pooled = []
+    for t in texts:
+        w = t.split()
+        pooled.extend(zip(w[:-1], w[1:]))
+    corpus_d2 = len(set(pooled)) / len(pooled) if pooled else float("nan")
+
+    prefixes = [" ".join(t.split()[:prefix_words]).lower() for t in texts]
+    return {
+        "corpus_distinct_2": float(corpus_d2),
+        "unique_prefix_ratio": len(set(prefixes)) / len(prefixes),
+    }

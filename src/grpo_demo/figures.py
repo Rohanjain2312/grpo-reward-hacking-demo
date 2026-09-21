@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 from .config import CONFIGS
+from .quality import cross_sample_diversity
 
 RUNS = ["baseline", "fixed_kl"]
 LABEL = {"baseline": "Baseline (no KL) - gamed", "fixed_kl": "Fixed (KL penalty, beta=0.1)"}
@@ -55,8 +56,22 @@ def load_run(run: str, results_dir: Path):
     for r in judge:
         judge_by_step.setdefault(r["step"], []).append(r["judge_score"])
     judge_mean = {s: sum(v) / len(v) for s, v in judge_by_step.items()}
+    samples = judge or _read_jsonl(results_dir / run / "samples.jsonl")
+
+    # Cross-sample diversity is computed here rather than during training: the failure
+    # mode it detects (one shared template across completions) only became apparent
+    # after the fact, and it is recoverable from the logged samples.
+    by_step = {}
+    for r in samples:
+        by_step.setdefault(r["step"], []).append(r["completion"])
+    diversity = {st: cross_sample_diversity(v) for st, v in by_step.items()}
+    for e in evals:
+        d = diversity.get(e["step"])
+        if d:
+            e.update(d)
+
     return {"metrics": metrics, "evals": evals, "judge": judge_mean,
-            "samples": judge or _read_jsonl(results_dir / run / "samples.jsonl")}
+            "samples": samples, "diversity": diversity}
 
 
 def _series(evals, key):
@@ -151,7 +166,8 @@ def fig_secondary(data, out: Path):
     panels = [
         ("eval_perplexity", "Perplexity under frozen base model", "lower = closer to base"),
         ("eval_completion_tokens", "Mean completion length (tokens)", "shorter = less to get wrong"),
-        ("eval_distinct_2", "Distinct-2 (bigram diversity)", "lower = more repetition"),
+        ("unique_prefix_ratio", "Unique opening phrases across eval set",
+         "lower = one template reused"),
         ("kl", "KL(policy || frozen base), per token", "how far the policy has drifted"),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(17.5, 3.9))
