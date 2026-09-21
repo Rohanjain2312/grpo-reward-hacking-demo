@@ -167,11 +167,12 @@ with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo
             seed = gr.Number(value=12345, precision=0, label="Seed")
         run = gr.Button("Generate both continuations", variant="primary")
         with gr.Row():
-            out_base = gr.Markdown(label="Baseline")
-            out_fixed = gr.Markdown(label="Fixed")
-        with gr.Row():
-            gr.Markdown("### Baseline - GRPO, no KL penalty (reward hacked)")
-            gr.Markdown("### Fixed - GRPO + KL penalty")
+            with gr.Column():
+                gr.Markdown("### Baseline - GRPO, no KL penalty (reward hacked)")
+                out_base = gr.Markdown()
+            with gr.Column():
+                gr.Markdown("### Fixed - GRPO + KL penalty")
+                out_fixed = gr.Markdown()
         note = gr.Markdown()
         run.click(compare, [opening, temperature, max_new_tokens, seed],
                   [out_base, out_fixed, note])
@@ -179,8 +180,7 @@ with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo
         for name, caption in FIGS:
             path = FIG_DIR / name
             if path.exists():
-                gr.Image(str(path), label=caption, show_label=True,
-                         show_download_button=True, container=True)
+                gr.Image(str(path), label=caption, show_label=True)
     with gr.Tab("Method"):
         gr.Markdown(f"""
 ### What was run
