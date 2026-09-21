@@ -16,7 +16,7 @@ from matplotlib.patches import Rectangle
 from .config import CONFIGS
 
 RUNS = ["baseline", "fixed_kl"]
-LABEL = {"baseline": "Baseline (no KL) - gamed", "fixed_kl": "Fixed (KL penalty, beta=0.04)"}
+LABEL = {"baseline": "Baseline (no KL) - gamed", "fixed_kl": "Fixed (KL penalty, beta=0.1)"}
 COLOR = {"baseline": "#c1272d", "fixed_kl": "#1f6fb4"}
 MARKER = {"baseline": "o", "fixed_kl": "s"}
 

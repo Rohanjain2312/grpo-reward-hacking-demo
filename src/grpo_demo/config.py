@@ -58,7 +58,7 @@ BASELINE = Config(
 
 FIXED_KL = Config(
     run="fixed_kl",
-    beta=0.04,
+    beta=0.1,
     hf_repo="rohanjain2312/grpo-reward-hacking-fixed-kl-qwen05b",
 )
 
