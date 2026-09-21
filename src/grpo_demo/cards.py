@@ -79,7 +79,7 @@ A three-part demo of reward hacking in GRPO:
 |---|---|
 | base model | `{cfg.policy_model}` |
 | reward model | `{cfg.reward_model}` (reward = P(positive)) |
-| task | continue the opening sentence of an IMDB review |
+| task | continue the opening sentence of a **negative** IMDB review |
 | algorithm | GRPO, group size {cfg.group_size}, {cfg.prompts_per_step} prompts/step |
 | KL coefficient (beta) | **{cfg.beta}** |
 | steps | {cfg.total_steps} |
