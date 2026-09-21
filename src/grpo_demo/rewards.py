@@ -8,13 +8,14 @@ still be gamed.
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from .compat import load
+
 
 class SentimentReward:
     def __init__(self, model_name: str, device, dtype=torch.float32, max_length: int = 256):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, dtype=dtype
-        ).to(device).eval()
+        self.model = load(AutoModelForSequenceClassification, model_name,
+                          dtype=dtype).to(device).eval()
         self.device = device
         self.max_length = max_length
         id2label = {int(k): str(v).lower() for k, v in self.model.config.id2label.items()}

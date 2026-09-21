@@ -19,6 +19,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from .compat import load
 from .config import CONFIGS
 
 JUDGE_MODEL = "Qwen/Qwen2.5-7B-Instruct"
@@ -53,8 +54,8 @@ class CoherenceJudge:
         self.tok.padding_side = "left"
         if self.tok.pad_token_id is None:
             self.tok.pad_token = self.tok.eos_token
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=dtype).to(
-            self.device).eval()
+        self.model = load(AutoModelForCausalLM, model_name,
+                          dtype=dtype).to(self.device).eval()
         self.digit_ids = [self.tok.encode(str(d), add_special_tokens=False)[0]
                           for d in range(1, 6)]
         self.values = torch.arange(1, 6, dtype=torch.float32, device=self.device)

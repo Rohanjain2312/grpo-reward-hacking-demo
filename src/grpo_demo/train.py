@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 
+from .compat import load
 from .config import get_config
 from .data import build_chat_prompt, load_prompts
 from .hub import METRICS, SAMPLES, HubCheckpointer, append_jsonl, rewrite_jsonl
@@ -188,10 +189,11 @@ def train(cfg, push: bool = True):
         samples_path.unlink(missing_ok=True)
         print("[resume] no checkpoint found -> starting from step 0", flush=True)
 
-    policy = AutoModelForCausalLM.from_pretrained(load_from, dtype=dtype).to(device)
+    policy = load(AutoModelForCausalLM, load_from, dtype=dtype).to(device)
     policy.config.use_cache = True
     policy.train()
-    ref_model = AutoModelForCausalLM.from_pretrained(cfg.policy_model, dtype=dtype).to(device).eval()
+    ref_model = load(AutoModelForCausalLM, cfg.policy_model,
+                     dtype=dtype).to(device).eval()
     for p in ref_model.parameters():
         p.requires_grad_(False)
     reward_fn = SentimentReward(cfg.reward_model, device)

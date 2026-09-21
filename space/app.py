@@ -24,6 +24,17 @@ except Exception:  # running on CPU hardware or locally
             return fn
         return deco if not a or not callable(a[0]) else a[0]
 
+from packaging.version import Version
+from transformers import __version__ as _TV
+_DTYPE_KW = "dtype" if Version(_TV).release >= (4, 56) else "torch_dtype"
+
+
+def _load(cls, name, dtype=None, **kw):
+    if dtype is not None:
+        kw[_DTYPE_KW] = dtype
+    return cls.from_pretrained(name, **kw)
+
+
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 BASELINE_REPO = "rohanjain2312/grpo-reward-hacked-sentiment-qwen05b"
 FIXED_REPO = "rohanjain2312/grpo-reward-hacking-fixed-kl-qwen05b"
@@ -51,7 +62,7 @@ if tokenizer.pad_token_id is None:
 MODELS = {}
 for key, repo in (("base", BASE_MODEL), ("baseline", BASELINE_REPO), ("fixed", FIXED_REPO)):
     try:
-        MODELS[key] = AutoModelForCausalLM.from_pretrained(repo, dtype=_dtype).eval()
+        MODELS[key] = _load(AutoModelForCausalLM, repo, dtype=_dtype).eval()
     except Exception as exc:  # a model repo not published yet should not kill the Space
         print(f"[warn] could not load {repo}: {exc}")
 

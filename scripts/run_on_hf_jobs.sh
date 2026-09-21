@@ -15,7 +15,7 @@ REPO=${REPO:-https://github.com/Rohanjain2312/grpo-reward-hacking-demo.git}
 BRANCH=${BRANCH:-main}
 HF=${HF:-hf}
 
-SETUP="pip install -q --no-cache-dir 'transformers>=4.51,<5' 'datasets>=3.2' accelerate 'huggingface_hub>=0.30' safetensors matplotlib && git clone --depth 1 -b $BRANCH $REPO /app && cd /app && pip install -q --no-deps -e ."
+SETUP="apt-get update -qq && apt-get install -y -qq git >/dev/null && pip install -q --no-cache-dir 'transformers>=4.51,<5' 'datasets>=3.2' accelerate 'huggingface_hub>=0.30' safetensors matplotlib && git clone --depth 1 -b $BRANCH $REPO /app && cd /app && pip install -q --no-deps -e ."
 
 case "$STAGE" in
   pilot)    CMD="bash scripts/pilot.sh" ;;
