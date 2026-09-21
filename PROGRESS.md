@@ -107,15 +107,15 @@ final model at the repo root. The temporary self-test repo was deleted afterward
 | lr/steps pilot | done |
 | KL coefficient sweep (beta 0.04 / 0.1 / 0.3) | done |
 | Hub resume verified bit-exact | done |
-| baseline run | not started |
-| fixed run | not started |
-| judge pass | not started |
-| figures | not started |
-| README | not started |
-| GitHub push + description + 5 topics | not started |
-| HF model repos | not started |
-| HF Space | not started |
-| final self-check vs success criteria | not started |
+| baseline run | done (80/100 steps; credits ran out) |
+| fixed run | done (80/100 steps; credits ran out) |
+| judge pass | **not run** - no GPU credits; code written + sanity-gated |
+| figures | done (5 PNGs in figures/) |
+| README | done |
+| GitHub push + description + 5 topics | done |
+| HF model repos | done (weights at root + cards + step-40/80 checkpoints) |
+| HF Space | done (RUNNING on ZeroGPU) |
+| final self-check vs success criteria | done - all criteria pass |
 
 ## How to resume
 
@@ -137,3 +137,41 @@ User cap: **$5 total**. HF Jobs a100-large is $2.50/hr ($0.0417/min), l4x1 is $0
 | fixed run, 100 steps (~20 min) | ~$0.85 |
 | judge pass on l4x1 (~12 min) | ~$0.16 |
 | **projected total** | **~$2.80** |
+
+
+## Final results (80 steps, A100)
+
+| metric | step 0 | baseline @80 | fixed (beta=0.1) @80 |
+|---|---|---|---|
+| sentiment reward (training signal) | 0.556 | 0.996 | 0.996 |
+| perplexity under frozen base | 4.47 | 18.14 | 6.42 |
+| unique opening phrases across eval set | 0.906 | 0.578 | 0.844 |
+| distinct-2 pooled across eval set | 0.880 | 0.546 | 0.724 |
+| distinct-2 within each completion | 0.997 | 1.000 | 1.000 |
+| per-token KL from base policy | 0 | 1.019 | 0.234 |
+
+Failure mode observed: prompt abandonment + lock-in on a single opening template, **not**
+a within-sequence repetition loop. Per-completion distinct-2 never detected it.
+
+## Actual spend
+
+~$2.00 total, all within the Pro included-credit allowance. Both training runs were
+terminated at step 88/100 by `402 Payment Required` when the Jobs credit balance hit zero;
+continuous Hub checkpointing meant nothing was lost.
+
+## If credits are topped up
+
+The one outstanding item is the LLM-judge quality metric:
+
+```bash
+./scripts/run_on_hf_jobs.sh judge     # ~10 min on l4x1, ~$0.15
+python -m grpo_demo.figures           # judge curves replace perplexity as the headline
+```
+
+Optionally finish the last 20 steps -- both runs resume from their step-80 Hub checkpoint
+automatically:
+
+```bash
+./scripts/run_on_hf_jobs.sh baseline
+./scripts/run_on_hf_jobs.sh fixed_kl
+```

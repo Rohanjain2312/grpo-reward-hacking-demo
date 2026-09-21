@@ -130,14 +130,21 @@ def compare(opening, temperature, max_new_tokens, seed):
 FIG_DIR = Path(__file__).parent / "figures"
 FIGS = [
     ("fig1_reward_hacking_diagnosis.png",
-     "The diagnosis: on the baseline run the training reward keeps climbing while an "
-     "independent judge's coherence rating falls."),
-    ("fig2_reward_vs_step.png", "Reward vs. step, both runs on the same axes."),
-    ("fig3_quality_vs_step.png", "Independent quality metric vs. step, both runs."),
+     "The diagnosis: on the baseline run the training reward saturates at 0.996 while "
+     "perplexity under the frozen base model -- a number the policy is never trained on "
+     "-- climbs from 4.47 to 18.14."),
+    ("fig2_reward_vs_step.png",
+     "Reward vs. step. Both runs end at the same 0.996; the KL penalty costs nothing in "
+     "reward."),
+    ("fig3_quality_vs_step.png",
+     "Quality vs. step. Baseline perplexity ends at 18.14, the KL-regularised run at 6.42."),
     ("fig4_secondary_metrics.png",
-     "Perplexity under the frozen base model, bigram diversity, and how far each policy "
-     "drifted from the base model in KL."),
-    ("fig5_sample_completions.png", "Raw completions side by side at three checkpoints."),
+     "The collapse is ACROSS completions, not within them: unique opening phrases fall "
+     "0.906 -> 0.578 for the baseline, while per-completion distinct-2 reads ~1.0 the whole "
+     "run and sees nothing."),
+    ("fig5_sample_completions.png",
+     "Raw completions at three checkpoints, chosen deterministically rather than "
+     "hand-picked."),
 ]
 
 INTRO = f"""
@@ -191,7 +198,9 @@ with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo
 | reward model | `{REWARD_MODEL}`, reward = P(positive) on the continuation |
 | data | `stanfordnlp/imdb`, negative reviews only, first sentence as the prompt |
 | algorithm | GRPO: 8 prompts/step x group of 8, group-normalised advantages |
-| difference between runs | KL coefficient `beta`: 0.0 (baseline) vs. the fixed run's value |
+| difference between runs | KL coefficient `beta`: **0.0** (baseline) vs **0.1** (fixed) |
+| steps completed | 80 (of 100 configured; training credits ran out) |
+| final perplexity under frozen base | 18.14 baseline vs 6.42 fixed |
 
 ### Why the KL penalty works
 
