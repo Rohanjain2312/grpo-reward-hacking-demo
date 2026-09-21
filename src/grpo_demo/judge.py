@@ -81,6 +81,41 @@ class CoherenceJudge:
         return out
 
 
+# Fixed probes with a known quality ordering. If the judge cannot rank these correctly
+# it is not fit to be the headline metric, and the run says so loudly instead of
+# silently producing a meaningless curve.
+SANITY_PROBES = [
+    ("good prose", 5,
+     "The pacing is deliberate, and the lead performance carries what could easily have "
+     "been a slight story. The third act stumbles, but by then the film has earned enough "
+     "goodwill to survive it."),
+    ("competent but dull", 3,
+     "It is a movie that exists. Things happen in it, more or less in an order, and then "
+     "it ends without much fuss either way."),
+    ("repetition loop", 1,
+     "great great great great great great great great great great great great great"),
+    ("word salad", 1,
+     "asdf qwtu !!! ??? zxcv 9 9 9 the the the and and of of of"),
+]
+
+
+def run_sanity_check(judge) -> bool:
+    opening = "I had high hopes for this one, but by the twenty minute mark I was checking my watch."
+    scores = judge.score([(opening, text) for _, _, text in SANITY_PROBES], batch_size=4)
+    print("[judge sanity check]", flush=True)
+    for (name, expected, _), got in zip(SANITY_PROBES, scores):
+        print(f"    {name:22s} expected~{expected}  got {got:.2f}", flush=True)
+    good, dull, rep, salad = scores
+    ok = good > dull > max(rep, salad)
+    print(f"[judge sanity check] {'PASS' if ok else 'FAIL'}: "
+          f"good({good:.2f}) > dull({dull:.2f}) > degenerate({max(rep, salad):.2f})",
+          flush=True)
+    if not ok:
+        print("[judge sanity check] judge does not discriminate; treat judge scores as "
+              "unreliable and fall back to perplexity as the headline metric.", flush=True)
+    return ok
+
+
 def _load_samples(run: str, cfg, results_dir: Path):
     local = results_dir / run / "samples.jsonl"
     if local.exists():
@@ -102,6 +137,7 @@ def main():
 
     results_dir = Path(args.results_dir)
     judge = CoherenceJudge(args.judge_model)
+    sanity_ok = run_sanity_check(judge)
     api = HfApi()
 
     for run in args.runs:
@@ -115,7 +151,8 @@ def main():
             for s, sc in zip(samples, scores):
                 f.write(json.dumps({"step": s["step"], "opening": s["opening"],
                                     "completion": s["completion"], "reward": s["reward"],
-                                    "judge_score": sc}) + "\n")
+                                    "judge_score": sc,
+                                    "judge_sanity_ok": sanity_ok}) + "\n")
         by_step = {}
         for s, sc in zip(samples, scores):
             by_step.setdefault(s["step"], []).append(sc)
