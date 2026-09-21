@@ -1,0 +1,22 @@
+[project]
+name = "grpo-reward-hacking-demo"
+version = "0.1.0"
+description = "GRPO reward hacking: a gamed sentiment reward vs. the same run with a KL penalty"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.3",
+    "transformers>=4.44",
+    "datasets>=2.20",
+    "accelerate>=0.33",
+    "huggingface_hub>=0.25",
+    "safetensors>=0.4",
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

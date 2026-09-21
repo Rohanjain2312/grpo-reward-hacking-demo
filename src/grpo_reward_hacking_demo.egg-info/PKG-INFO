@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: grpo-reward-hacking-demo
+Version: 0.1.0
+Summary: GRPO reward hacking: a gamed sentiment reward vs. the same run with a KL penalty
+Requires-Python: >=3.10
+Requires-Dist: torch>=2.3
+Requires-Dist: transformers>=4.44
+Requires-Dist: datasets>=2.20
+Requires-Dist: accelerate>=0.33
+Requires-Dist: huggingface_hub>=0.25
+Requires-Dist: safetensors>=0.4
+Requires-Dist: numpy>=1.26
+Requires-Dist: matplotlib>=3.8

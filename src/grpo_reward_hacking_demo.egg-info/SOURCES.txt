@@ -1,0 +1,17 @@
+pyproject.toml
+src/grpo_demo/__init__.py
+src/grpo_demo/cards.py
+src/grpo_demo/config.py
+src/grpo_demo/data.py
+src/grpo_demo/figures.py
+src/grpo_demo/hub.py
+src/grpo_demo/judge.py
+src/grpo_demo/links.py
+src/grpo_demo/quality.py
+src/grpo_demo/rewards.py
+src/grpo_demo/train.py
+src/grpo_reward_hacking_demo.egg-info/PKG-INFO
+src/grpo_reward_hacking_demo.egg-info/SOURCES.txt
+src/grpo_reward_hacking_demo.egg-info/dependency_links.txt
+src/grpo_reward_hacking_demo.egg-info/requires.txt
+src/grpo_reward_hacking_demo.egg-info/top_level.txt

@@ -1,0 +1,5 @@
+torch
+transformers>=4.51
+gradio>=5.0
+accelerate
+huggingface_hub

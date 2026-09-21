@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+results/*/hub/
+results/*/final/
+*.safetensors
+*.bin
+*.pt
+.ipynb_checkpoints/
+.DS_Store
+
+# internal brief, not part of the published project
+reward-hacking-demo-brief.md
