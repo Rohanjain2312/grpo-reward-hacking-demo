@@ -14,6 +14,37 @@ Resume point for this project. Update the table as stages complete.
 | mitigation | KL penalty vs frozen base, k3 estimator, `beta` chosen by sweep | brief's default; reward capping considered as a fallback |
 | compute | Hugging Face Jobs, `a100-large` flavor | user chose it over Colab; fully CLI-driven |
 
+### KL coefficient sweep (A100, lr 1e-5, 30 steps per arm, nothing pushed)
+
+Eval perplexity starts at 4.43 for every arm. Compare against beta=0 at step 30:
+reward 0.996, perplexity 10.18.
+
+| beta | reward @10 | reward @20 | reward @30 | ppl @10 | ppl @20 | ppl @30 |
+|---|---|---|---|---|---|---|
+| 0 (baseline) | 0.748 | 0.994 | 0.996 | 4.48 | 7.35 | 10.18 |
+| 0.04 | 0.740 | 0.891 | 0.891 | 4.51 | 5.75 | 5.61 |
+| 0.1 | 0.786 | 0.865 | **0.906** | 4.64 | 5.60 | **5.62** |
+| 0.3 | 0.747 | - | - | 4.76 | - | - |
+
+The 0.3 arm was cancelled at step 10 once 0.1 was clearly sufficient. **Chose beta = 0.1**:
+it reaches the highest reward of the regularised arms at the same perplexity as 0.04, so
+the extra drift resistance over a 100-step run is free. Note this contradicts the
+prediction that the standard 0.04 would be far too weak -- it is not.
+
+### Hub resume verification
+
+A fresh process with its local output directory deleted found the step-2 checkpoint in
+the model repo and continued from it. Steps 3-4 reproduced the uninterrupted run exactly:
+
+| | step 3 reward | step 3 kl | step 4 reward | step 4 eval_reward |
+|---|---|---|---|---|
+| uninterrupted | 0.4527 | 0.0005 | 0.5661 | 0.5376813411712646 |
+| resumed from Hub | 0.4527 | 0.0005 | 0.5661 | 0.5376813411712646 |
+
+Repo layout confirmed: `checkpoints/step_NNNNNN/{model.safetensors, optimizer.pt,
+training_state.json, tokenizer}`, `latest.json`, `logs/{metrics,samples}.jsonl`, and the
+final model at the repo root. The temporary self-test repo was deleted afterwards.
+
 ## Status
 
 ### Pilot results (A100, 2026-09-21, lr 1e-5, beta 0, 50 steps, nothing pushed)
@@ -34,6 +65,37 @@ degeneration is *not* a repetition loop -- perplexity is therefore a working qua
 signal here, and the LLM judge corroborates rather than carries the result alone.
 Throughput ~7 s/step.
 
+### KL coefficient sweep (A100, lr 1e-5, 30 steps per arm, nothing pushed)
+
+Eval perplexity starts at 4.43 for every arm. Compare against beta=0 at step 30:
+reward 0.996, perplexity 10.18.
+
+| beta | reward @10 | reward @20 | reward @30 | ppl @10 | ppl @20 | ppl @30 |
+|---|---|---|---|---|---|---|
+| 0 (baseline) | 0.748 | 0.994 | 0.996 | 4.48 | 7.35 | 10.18 |
+| 0.04 | 0.740 | 0.891 | 0.891 | 4.51 | 5.75 | 5.61 |
+| 0.1 | 0.786 | 0.865 | **0.906** | 4.64 | 5.60 | **5.62** |
+| 0.3 | 0.747 | - | - | 4.76 | - | - |
+
+The 0.3 arm was cancelled at step 10 once 0.1 was clearly sufficient. **Chose beta = 0.1**:
+it reaches the highest reward of the regularised arms at the same perplexity as 0.04, so
+the extra drift resistance over a 100-step run is free. Note this contradicts the
+prediction that the standard 0.04 would be far too weak -- it is not.
+
+### Hub resume verification
+
+A fresh process with its local output directory deleted found the step-2 checkpoint in
+the model repo and continued from it. Steps 3-4 reproduced the uninterrupted run exactly:
+
+| | step 3 reward | step 3 kl | step 4 reward | step 4 eval_reward |
+|---|---|---|---|---|
+| uninterrupted | 0.4527 | 0.0005 | 0.5661 | 0.5376813411712646 |
+| resumed from Hub | 0.4527 | 0.0005 | 0.5661 | 0.5376813411712646 |
+
+Repo layout confirmed: `checkpoints/step_NNNNNN/{model.safetensors, optimizer.pt,
+training_state.json, tokenizer}`, `latest.json`, `logs/{metrics,samples}.jsonl`, and the
+final model at the repo root. The temporary self-test repo was deleted afterwards.
+
 ## Status
 
 | stage | state |
@@ -43,7 +105,8 @@ Throughput ~7 s/step.
 | GitHub repo pushed, description + 5 topics | done |
 | HF model repos + Space created | done |
 | lr/steps pilot | done |
-| KL coefficient sweep (beta 0.04 / 0.1 / 0.3) | running |
+| KL coefficient sweep (beta 0.04 / 0.1 / 0.3) | done |
+| Hub resume verified bit-exact | done |
 | baseline run | not started |
 | fixed run | not started |
 | judge pass | not started |
