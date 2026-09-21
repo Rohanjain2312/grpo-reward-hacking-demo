@@ -150,10 +150,11 @@ def fig_quality(data, out: Path):
 def fig_secondary(data, out: Path):
     panels = [
         ("eval_perplexity", "Perplexity under frozen base model", "lower = closer to base"),
+        ("eval_completion_tokens", "Mean completion length (tokens)", "shorter = less to get wrong"),
         ("eval_distinct_2", "Distinct-2 (bigram diversity)", "lower = more repetition"),
         ("kl", "KL(policy || frozen base), per token", "how far the policy has drifted"),
     ]
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 3.9))
+    fig, axes = plt.subplots(1, 4, figsize=(17.5, 3.9))
     for ax, (key, title, sub) in zip(axes, panels):
         for run in RUNS:
             source = data[run]["metrics"] if key == "kl" else data[run]["evals"]
