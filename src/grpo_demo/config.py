@@ -22,27 +22,27 @@ class Config:
     label_filter: int | None = 0   # 0 = negative IMDB reviews only
 
     # --- GRPO -----------------------------------------------------------
-    total_steps: int = 200
+    total_steps: int = 100
     prompts_per_step: int = 8          # B
     group_size: int = 8                # G -> B*G completions per step
     micro_batch: int = 16              # sequences per fwd/bwd chunk
     max_new_tokens: int = 48
     temperature: float = 1.0
     top_p: float = 1.0
-    learning_rate: float = 3e-6
+    learning_rate: float = 1e-5
     warmup_steps: int = 10
     max_grad_norm: float = 1.0
     adv_eps: float = 1e-4
     beta: float = 0.0                  # KL coefficient; 0.0 == no mitigation
 
     # --- evaluation -----------------------------------------------------
-    eval_every: int = 20
+    eval_every: int = 10
     eval_temperature: float = 0.7
     eval_top_p: float = 0.95
     eval_max_new_tokens: int = 48
 
     # --- checkpointing --------------------------------------------------
-    full_ckpt_every: int = 50          # weights + optimizer pushed to the Hub
+    full_ckpt_every: int = 40          # weights + optimizer pushed to the Hub
     seed: int = 0
     output_dir: str = "results"
 

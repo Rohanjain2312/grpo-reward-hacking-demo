@@ -199,6 +199,7 @@ def fig_samples(data, out: Path, steps=None, per_step=2):
     n_rows = len(steps) * per_step
     fig_h = 1.15 + 1.62 * n_rows
     fig, ax = plt.subplots(figsize=(13.2, fig_h))
+    fig.subplots_adjust(left=0, right=1, top=0.965, bottom=0.005)
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -250,7 +251,7 @@ def fig_samples(data, out: Path, steps=None, per_step=2):
                     ax.text(x + 0.008, top - offset - 0.016, body, fontsize=8.3, va="top",
                             color="#222", transform=ax.transAxes)
     fig.suptitle("Same prompts, same step: gamed vs. KL-regularised completions",
-                 fontsize=13, fontweight="bold", y=1.0)
+                 fontsize=13, fontweight="bold", y=0.995)
     fig.savefig(out / "fig5_sample_completions.png")
     plt.close(fig)
 
