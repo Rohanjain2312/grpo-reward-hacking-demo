@@ -8,7 +8,10 @@
 #
 # Requires HF_TOKEN in the environment (write access).
 set -euo pipefail
-STAGE=${1:?usage: run_on_hf_jobs.sh {pilot|baseline|fixed_kl|judge}}
+STAGE=${1:-}
+if [ -z "$STAGE" ]; then
+  echo "usage: run_on_hf_jobs.sh <pilot|baseline|fixed_kl|judge>" >&2; exit 1
+fi
 FLAVOR=${FLAVOR:-a100-large}
 IMAGE=${IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
 REPO=${REPO:-https://github.com/Rohanjain2312/grpo-reward-hacking-demo.git}
