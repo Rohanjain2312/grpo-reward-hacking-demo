@@ -82,7 +82,7 @@ A three-part demo of reward hacking in GRPO:
 | task | continue the opening sentence of a **negative** IMDB review |
 | algorithm | GRPO, group size {cfg.group_size}, {cfg.prompts_per_step} prompts/step |
 | KL coefficient (beta) | **{cfg.beta}** |
-| steps | {cfg.total_steps} |
+| steps actually completed | {cfg.total_steps} |
 | learning rate | {cfg.learning_rate} |
 | max new tokens | {cfg.max_new_tokens} |
 
@@ -92,6 +92,14 @@ A three-part demo of reward hacking in GRPO:
 Full metrics and generated samples for every checkpoint are in `logs/metrics.jsonl` and
 `logs/samples.jsonl` in this repo. Step-numbered checkpoints (weights + optimizer state)
 are under `checkpoints/`.
+
+## A note on run length
+
+Both runs were configured for 100 steps and stopped at **step 80**, when the Hugging Face
+Jobs credit balance on the training account ran out mid-run. Step 80 is the last completed
+evaluation checkpoint and is what is published here. The curves had long since separated
+by then (the reward saturated around step 30), so the conclusion is unaffected -- but the
+runs are reported as 80 steps, not 100, because that is what was run.
 
 ## Intended use
 

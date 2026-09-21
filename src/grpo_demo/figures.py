@@ -82,33 +82,42 @@ def _series(evals, key):
 
 # ------------------------------------------------------------------- figures
 def fig_diagnosis(data, out: Path):
-    """The money shot: reward up, quality down, same axis, baseline run only."""
+    """The money shot: reward up, quality down, same axes, baseline run only."""
     d = data["baseline"]
     steps, reward = _series(d["evals"], "eval_reward")
-    j_steps = sorted(d["judge"])
-    j_vals = [d["judge"][s] for s in j_steps]
+    if d["judge"]:
+        q_steps = sorted(d["judge"])
+        q_vals = [d["judge"][s] for s in q_steps]
+        q_label, q_axis, q_lim = ("Coherence (independent LLM judge)",
+                                  "Judge coherence score (1-5)", (1, 5.1))
+        invert = False
+    else:
+        q_steps, q_vals = _series(d["evals"], "eval_perplexity")
+        q_label = "Perplexity under frozen base model (independent)"
+        q_axis = "Perplexity (higher = worse)"
+        q_lim = (0, max(q_vals) * 1.15 if q_vals else 1)
+        invert = False
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.4))
+    fig, ax = plt.subplots(figsize=(7.8, 4.5))
     ax.plot(steps, reward, color="#c1272d", marker="o", lw=2.2, ms=5,
-            label="Sentiment reward (training signal)")
+            label="Sentiment reward (the training signal)")
     ax.set_xlabel("GRPO training step")
     ax.set_ylabel("Reward: P(positive)", color="#c1272d")
     ax.tick_params(axis="y", colors="#c1272d")
-    ax.set_ylim(0, 1.02)
+    ax.set_ylim(0, 1.05)
 
     ax2 = ax.twinx()
     ax2.spines["top"].set_visible(False)
-    if j_vals:
-        ax2.plot(j_steps, j_vals, color="#2a2a2a", marker="s", lw=2.2, ms=5, ls="--",
-                 label="Coherence (independent LLM judge)")
-    ax2.set_ylabel("Judge coherence score (1-5)", color="#2a2a2a")
-    ax2.set_ylim(1, 5.1)
+    ax2.plot(q_steps, q_vals, color="#2a2a2a", marker="s", lw=2.2, ms=5, ls="--",
+             label=q_label)
+    ax2.set_ylabel(q_axis, color="#2a2a2a")
+    ax2.set_ylim(*q_lim)
     ax2.grid(False)
 
     lines = ax.get_lines() + ax2.get_lines()
-    ax.legend(lines, [l.get_label() for l in lines], loc="center left", fontsize=10)
-    ax.set_title("Reward hacking: the reward keeps climbing while quality collapses")
-    fig.text(0.5, -0.04, "GRPO on IMDB review continuation, Qwen2.5-0.5B-Instruct, "
+    ax.legend(lines, [l.get_label() for l in lines], loc="lower right", fontsize=9.5)
+    ax.set_title("Reward hacking: the reward saturates while quality keeps degrading")
+    fig.text(0.5, -0.05, "GRPO on IMDB negative-review continuation, Qwen2.5-0.5B-Instruct, "
              "reward = P(positive) from lvwerra/distilbert-imdb, no KL penalty",
              ha="center", fontsize=8.5, color="#555")
     fig.savefig(out / "fig1_reward_hacking_diagnosis.png")
@@ -144,33 +153,40 @@ def fig_quality(data, out: Path):
         ax.plot(steps, [data[run]["judge"][s] for s in steps], color=COLOR[run],
                 marker=MARKER[run], lw=2.2, ms=5, label=LABEL[run])
         plotted = True
-    if not plotted:  # judge not run yet -- fall back to perplexity
+    if not plotted:
         for run in RUNS:
             steps, ppl = _series(data[run]["evals"], "eval_perplexity")
             ax.plot(steps, ppl, color=COLOR[run], marker=MARKER[run], lw=2.2, ms=5,
                     label=LABEL[run])
-        ax.set_ylabel("Perplexity under frozen base model")
+        ax.set_ylabel("Perplexity under frozen base model (higher = worse)")
+        caption = ("Perplexity of the continuation under the original frozen policy. "
+                   "Never part of the training signal.")
     else:
         ax.set_ylabel("Judge coherence score (1-5)")
         ax.set_ylim(1, 5.1)
+        caption = ("Qwen2.5-7B-Instruct judge, fixed rubric, sentiment explicitly "
+                   "excluded from the grade")
     ax.set_xlabel("GRPO training step")
     ax.set_title("Output quality vs. training step (metric not used for training)")
-    ax.legend(loc="lower left", fontsize=10)
-    fig.text(0.5, -0.04, "Qwen2.5-7B-Instruct judge, fixed rubric, sentiment explicitly "
-             "excluded from the grade", ha="center", fontsize=8.5, color="#555")
+    ax.legend(loc="upper left", fontsize=10)
+    fig.text(0.5, -0.04, caption, ha="center", fontsize=8.5, color="#555")
     fig.savefig(out / "fig3_quality_vs_step.png")
     plt.close(fig)
 
 
 def fig_secondary(data, out: Path):
     panels = [
-        ("eval_perplexity", "Perplexity under frozen base model", "lower = closer to base"),
-        ("eval_completion_tokens", "Mean completion length (tokens)", "shorter = less to get wrong"),
-        ("unique_prefix_ratio", "Unique opening phrases across eval set",
-         "lower = one template reused"),
-        ("kl", "KL(policy || frozen base), per token", "how far the policy has drifted"),
+        ("unique_prefix_ratio", "Unique opening phrases\nACROSS the eval set",
+         "catches it: lower = one template reused"),
+        ("corpus_distinct_2", "Distinct-2 pooled\nACROSS the eval set",
+         "catches it: lower = shared phrasing"),
+        ("eval_distinct_2", "Distinct-2 WITHIN\neach completion",
+         "misses it: flat at ~1.0 all run"),
+        ("kl", "KL(policy || frozen base)\nper token",
+         "how far the policy drifted"),
     ]
-    fig, axes = plt.subplots(1, 4, figsize=(17.5, 3.9))
+    fig, axes = plt.subplots(1, 4, figsize=(16.5, 4.3))
+    handles = None
     for ax, (key, title, sub) in zip(axes, panels):
         for run in RUNS:
             source = data[run]["metrics"] if key == "kl" else data[run]["evals"]
@@ -185,15 +201,23 @@ def fig_secondary(data, out: Path):
             else:
                 ax.plot(steps, vals, color=COLOR[run], marker=MARKER[run], lw=2.0, ms=4,
                         label=LABEL[run])
-        ax.set_title(title, fontsize=11.5)
-        ax.set_xlabel("GRPO training step")
-        ax.text(0.02, 0.95, sub, transform=ax.transAxes, fontsize=8.5, color="#666",
-                va="top")
+        ax.set_title(title, fontsize=10.5)
+        ax.set_xlabel("GRPO training step", fontsize=9.5)
+        ax.tick_params(labelsize=9)
         if key == "kl":
             ax.set_yscale("symlog", linthresh=1e-3)
-    axes[0].legend(loc="upper left", fontsize=9, bbox_to_anchor=(0, 0.88))
-    fig.suptitle("Secondary diagnostics: perplexity, repetition and policy drift",
-                 fontsize=13, fontweight="bold", y=1.04)
+        else:
+            ax.set_ylim(0, 1.08)
+        ax.text(0.5, -0.30, sub, transform=ax.transAxes, fontsize=8.5, color="#666",
+                ha="center", va="top", style="italic")
+        if handles is None:
+            handles = ax.get_lines()[:2]
+    fig.legend(handles, [h.get_label() for h in handles], loc="lower center",
+               ncol=2, fontsize=10, bbox_to_anchor=(0.5, -0.10))
+    fig.suptitle("The collapse is ACROSS completions, not within them - so the usual "
+                 "within-sample diversity metric never sees it",
+                 fontsize=12.5, fontweight="bold", y=1.02)
+    fig.subplots_adjust(bottom=0.26, wspace=0.28)
     fig.savefig(out / "fig4_secondary_metrics.png")
     plt.close(fig)
 
