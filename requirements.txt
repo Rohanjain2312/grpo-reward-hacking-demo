@@ -1,9 +1,19 @@
-# Pinned to the versions the reported runs were produced with.
-torch==2.6.0
-transformers==4.51.3
-datasets==3.5.0
-accelerate==1.6.0
-huggingface_hub==0.30.2
-safetensors==0.5.3
-numpy==2.2.4
-matplotlib==3.10.1
+# Environment the reported runs were produced in: Hugging Face Jobs, a100-large,
+# docker image pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime.
+#
+# Versions confirmed in that container:
+#     torch         2.6.0+cu124   (from the base image)
+#     transformers  4.57.6        (resolved from the constraint below)
+#
+# The remaining packages were installed unpinned, so this file is a set of working
+# constraints rather than a frozen lockfile. The code is also exercised locally on
+# transformers 5.x; src/grpo_demo/compat.py handles the torch_dtype -> dtype rename
+# across that range.
+torch>=2.3
+transformers>=4.44
+datasets>=3.2
+accelerate>=0.33
+huggingface_hub>=0.30
+safetensors>=0.4
+numpy>=1.26
+matplotlib>=3.8

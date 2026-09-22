@@ -62,6 +62,11 @@ At step 0 both policies write a genuinely critical continuation of a negative re
 "Absolutely stunningly captivating" and mentions nothing about the actual film, while the
 KL-regularised run is still engaging with "The Fallen Ones" and "The Lion King franchise".
 
+The same pairs as copyable text, plus every checkpoint in between, are in
+[`docs/sample_completions.md`](docs/sample_completions.md). The complete set — all 576
+held-out completions per run with their rewards — is in `results/*/samples.jsonl` and in
+`logs/samples.jsonl` in each model repo.
+
 ### The metric that would have missed this
 
 I originally picked distinct-2 to catch repetition, expecting a "great great great"
@@ -231,7 +236,8 @@ To force a run to start over, delete `latest.json` from its model repo.
 src/grpo_demo/
   train.py      GRPO loop, generation, advantages, KL, eval, checkpointing  (the core)
   rewards.py    the sentiment classifier wrapper
-  quality.py    perplexity under the frozen base model, distinct-2
+  quality.py    perplexity under the frozen base model, distinct-2,
+                cross-sample diversity
   judge.py      LLM-judge coherence scoring
   hub.py        Hugging Face checkpointing and resume
   figures.py    the plots in figures/
@@ -243,6 +249,7 @@ notebooks/      the Colab notebook
 scripts/        Hugging Face Jobs launchers
 space/          the Gradio app
 figures/        article-ready PNGs
+docs/           sample_completions.md, the full side-by-side sample table
 results/        metrics.jsonl, samples.jsonl, judge.jsonl per run
 ```
 
