@@ -68,7 +68,7 @@ def model_card(cfg, metrics_path) -> str:
             "| metric | step 0 | step {n} |\n|---|---|---|\n"
             "| sentiment reward (P(positive), held-out) | {r0:.3f} | {r1:.3f} |\n"
             "| perplexity under frozen base model | {p0:.1f} | {p1:.1f} |\n"
-            "| distinct-2 (bigram diversity) | {d0:.3f} | {d1:.3f} |\n"
+            "| distinct-2 within each completion | {d0:.3f} | {d1:.3f} |\n"
         ).format(n=last["step"], r0=first["eval_reward"], r1=last["eval_reward"],
                  p0=first["eval_perplexity"], p1=last["eval_perplexity"],
                  d0=first["eval_distinct_2"], d1=last["eval_distinct_2"])
@@ -96,7 +96,7 @@ A three-part demo of reward hacking in GRPO:
 | algorithm | GRPO, group size {cfg.group_size}, {cfg.prompts_per_step} prompts/step |
 | KL coefficient (beta) | **{cfg.beta}** |
 | reward cap | **{cfg.reward_cap if cfg.reward_cap is not None else 'none'}** |
-| steps actually completed | {cfg.total_steps} |
+| steps | {cfg.total_steps} |
 | learning rate | {cfg.learning_rate} |
 | max new tokens | {cfg.max_new_tokens} |
 
@@ -106,14 +106,6 @@ A three-part demo of reward hacking in GRPO:
 Full metrics and generated samples for every checkpoint are in `logs/metrics.jsonl` and
 `logs/samples.jsonl` in this repo. Step-numbered checkpoints (weights + optimizer state)
 are under `checkpoints/`.
-
-## A note on run length
-
-Both runs were configured for 100 steps and stopped at **step 80**, when the Hugging Face
-Jobs credit balance on the training account ran out mid-run. Step 80 is the last completed
-evaluation checkpoint and is what is published here. The curves had long since separated
-by then (the reward saturated around step 30), so the conclusion is unaffected -- but the
-runs are reported as 80 steps, not 100, because that is what was run.
 
 ## Intended use
 

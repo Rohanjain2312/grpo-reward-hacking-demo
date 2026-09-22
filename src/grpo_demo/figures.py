@@ -87,31 +87,13 @@ def _series(evals, key):
 
 
 # ------------------------------------------------------------------- figures
-def fig_diagnosis(data, out: Path):
-    """The money shot: reward up, quality down, same axes, baseline run only."""
-    d = data["baseline"]
-    steps, reward = _series(d["evals"], "eval_reward")
-    if d["judge"]:
-        q_steps = sorted(d["judge"])
-        q_vals = [d["judge"][s] for s in q_steps]
-        q_label, q_axis, q_lim = ("Coherence (independent LLM judge)",
-                                  "Judge coherence score (1-5)", (1, 5.1))
-        invert = False
-    else:
-        q_steps, q_vals = _series(d["evals"], "eval_perplexity")
-        q_label = "Perplexity under frozen base model (independent)"
-        q_axis = "Perplexity (higher = worse)"
-        q_lim = (0, max(q_vals) * 1.15 if q_vals else 1)
-        invert = False
-
-    fig, ax = plt.subplots(figsize=(7.8, 4.5))
+def _twin(ax, steps, reward, q_steps, q_vals, q_axis, q_label, q_lim, title):
     ax.plot(steps, reward, color="#c1272d", marker="o", lw=2.2, ms=5,
             label="Sentiment reward (the training signal)")
     ax.set_xlabel("GRPO training step")
     ax.set_ylabel("Reward: P(positive)", color="#c1272d")
     ax.tick_params(axis="y", colors="#c1272d")
     ax.set_ylim(0, 1.05)
-
     ax2 = ax.twinx()
     ax2.spines["top"].set_visible(False)
     ax2.plot(q_steps, q_vals, color="#2a2a2a", marker="s", lw=2.2, ms=5, ls="--",
@@ -119,13 +101,45 @@ def fig_diagnosis(data, out: Path):
     ax2.set_ylabel(q_axis, color="#2a2a2a")
     ax2.set_ylim(*q_lim)
     ax2.grid(False)
-
+    ax.set_title(title, fontsize=11.5)
     lines = ax.get_lines() + ax2.get_lines()
-    ax.legend(lines, [l.get_label() for l in lines], loc="lower right", fontsize=9.5)
-    ax.set_title("Reward hacking: the reward saturates while quality keeps degrading")
-    fig.text(0.5, -0.05, "GRPO on IMDB negative-review continuation, Qwen2.5-0.5B-Instruct, "
+    ax.legend(lines, [l.get_label() for l in lines], loc="lower right", fontsize=8.5)
+
+
+def fig_diagnosis(data, out: Path):
+    """Reward up, quality down, on the baseline run -- shown against BOTH quality metrics.
+
+    Both panels are plotted rather than only the more dramatic one: perplexity moves ~4x,
+    the LLM judge barely 0.4 of its 5 points, and that gap is itself a finding.
+    """
+    d = data["baseline"]
+    steps, reward = _series(d["evals"], "eval_reward")
+    p_steps, ppl = _series(d["evals"], "eval_perplexity")
+    has_judge = bool(d["judge"])
+
+    ncols = 2 if has_judge else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(7.8 * ncols, 4.6))
+    axes = axes if has_judge else [axes]
+
+    _twin(axes[0], steps, reward, p_steps, ppl,
+          "Perplexity (higher = worse)",
+          "Perplexity under frozen base model",
+          (0, max(ppl) * 1.15),
+          "Against perplexity: a ~4x collapse")
+    if has_judge:
+        j_steps = sorted(d["judge"])
+        _twin(axes[1], steps, reward, j_steps, [d["judge"][s] for s in j_steps],
+              "Judge coherence (1-5)",
+              "Coherence, independent 7B LLM judge",
+              (1, 5.1),
+              "Against an LLM judge: real, but far smaller")
+
+    fig.suptitle("Reward hacking: the reward saturates while quality degrades",
+                 fontsize=13.5, fontweight="bold", y=1.0)
+    fig.text(0.5, -0.04, "GRPO on IMDB negative-review continuation, Qwen2.5-0.5B-Instruct, "
              "reward = P(positive) from lvwerra/distilbert-imdb, no KL penalty",
              ha="center", fontsize=8.5, color="#555")
+    fig.subplots_adjust(wspace=0.38)
     fig.savefig(out / "fig1_reward_hacking_diagnosis.png")
     plt.close(fig)
 
@@ -150,32 +164,38 @@ def fig_reward(data, out: Path):
 
 
 def fig_quality(data, out: Path):
-    fig, ax = plt.subplots(figsize=(7.2, 4.3))
-    plotted = False
+    """Both independent quality metrics, every arm, on comparable axes."""
+    has_judge = any(data[r]["judge"] for r in RUNS)
+    ncols = 2 if has_judge else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(7.6 * ncols, 4.4))
+    axes = axes if has_judge else [axes]
+
     for run in RUNS:
-        steps = sorted(data[run]["judge"])
-        if not steps:
-            continue
-        ax.plot(steps, [data[run]["judge"][s] for s in steps], color=COLOR[run],
-                marker=MARKER[run], lw=2.2, ms=5, label=LABEL[run])
-        plotted = True
-    if not plotted:
+        steps, ppl = _series(data[run]["evals"], "eval_perplexity")
+        axes[0].plot(steps, ppl, color=COLOR[run], marker=MARKER[run], lw=2.2, ms=5,
+                     label=LABEL[run])
+    axes[0].set_ylabel("Perplexity under frozen base model")
+    axes[0].set_title("Perplexity (higher = worse)", fontsize=11.5)
+    axes[0].legend(loc="upper left", fontsize=9)
+
+    if has_judge:
         for run in RUNS:
-            steps, ppl = _series(data[run]["evals"], "eval_perplexity")
-            ax.plot(steps, ppl, color=COLOR[run], marker=MARKER[run], lw=2.2, ms=5,
-                    label=LABEL[run])
-        ax.set_ylabel("Perplexity under frozen base model (higher = worse)")
-        caption = ("Perplexity of the continuation under the original frozen policy. "
-                   "Never part of the training signal.")
-    else:
-        ax.set_ylabel("Judge coherence score (1-5)")
-        ax.set_ylim(1, 5.1)
-        caption = ("Qwen2.5-7B-Instruct judge, fixed rubric, sentiment explicitly "
-                   "excluded from the grade")
-    ax.set_xlabel("GRPO training step")
-    ax.set_title("Output quality vs. training step (metric not used for training)")
-    ax.legend(loc="upper left", fontsize=10)
-    fig.text(0.5, -0.04, caption, ha="center", fontsize=8.5, color="#555")
+            js = sorted(data[run]["judge"])
+            if not js:
+                continue
+            axes[1].plot(js, [data[run]["judge"][s] for s in js], color=COLOR[run],
+                         marker=MARKER[run], lw=2.2, ms=5, label=LABEL[run])
+        axes[1].set_ylabel("Judge coherence score (1-5)")
+        axes[1].set_ylim(3.0, 5.0)
+        axes[1].set_title("LLM judge (higher = better) - note the compressed scale",
+                          fontsize=11.5)
+        axes[1].legend(loc="lower left", fontsize=9)
+
+    for ax in axes:
+        ax.set_xlabel("GRPO training step")
+    fig.suptitle("Output quality vs. training step - neither metric is part of the "
+                 "training signal", fontsize=13, fontweight="bold", y=1.01)
+    fig.subplots_adjust(wspace=0.26)
     fig.savefig(out / "fig3_quality_vs_step.png")
     plt.close(fig)
 
@@ -235,7 +255,11 @@ def _pick_samples(records, step, n=2):
 
 
 def fig_samples(data, out: Path, steps=None, per_step=2):
-    """Side-by-side raw completions with their reward (and judge score, when present)."""
+    """Side-by-side raw completions with their reward and judge score.
+
+    Row heights are derived from the wrapped text so cells never overflow into the row
+    below, which they do at four columns with a fixed row height.
+    """
     base = data["baseline"]
     all_steps = sorted(base["judge"] or {r["step"] for r in base["samples"]})
     if steps is None:
@@ -243,65 +267,83 @@ def fig_samples(data, out: Path, steps=None, per_step=2):
     if not steps:
         return
 
-    cols = ["prompt"] + [r for r in RUNS]
-    n_cols = len(cols)
-    n_rows = len(steps) * per_step
-    fig_w = 4.4 * n_cols
-    fig_h = 1.15 + 1.62 * n_rows
+    n_cols = len(RUNS) + 1
+    wrap_at = max(26, int(140 / n_cols))
+    char_cap = max(180, int(960 / n_cols))
+
+    # lay the content out first so row heights can follow it
+    layout = []
+    for step in steps:
+        picked = {r: _pick_samples(data[r]["samples"], step, per_step) for r in RUNS}
+        for i in range(per_step):
+            rows = [picked[r][i] if i < len(picked[r]) else None for r in RUNS]
+            if not any(rows):
+                continue
+            opening = next(r["opening"] for r in rows if r)
+            cells = [textwrap.fill(opening, wrap_at)]
+            for rec in rows:
+                cells.append("" if rec is None
+                             else textwrap.fill(rec["completion"][:char_cap] or "(empty)", wrap_at))
+            n_lines = max(c.count("\n") + 1 for c in cells)
+            layout.append({"step": step, "first": i == 0, "cells": cells,
+                           "recs": rows, "lines": n_lines})
+
+    LINE_IN = 0.135          # inches per wrapped line
+    PAD_IN = 0.46            # score line + padding
+    HEADER_IN = 0.46
+    TITLE_IN = 0.52
+    heights = [r["lines"] * LINE_IN + PAD_IN + (0.20 if r["first"] else 0) for r in layout]
+    fig_h = TITLE_IN + HEADER_IN + sum(heights)
+    fig_w = 4.2 * n_cols
+
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-    fig.subplots_adjust(left=0, right=1, top=0.965, bottom=0.005)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
     gap = 0.008
-    col_w = [(1.0 - gap * n_cols) / n_cols] * n_cols
-    col_x, acc = [], 0.004
-    for w in col_w:
-        col_x.append(acc)
-        acc += w + gap
+    col_w = (1.0 - gap * n_cols) / n_cols
+    col_x = [0.004 + i * (col_w + gap) for i in range(n_cols)]
     headers = ["Review opening (prompt)"] + [LABEL[r] for r in RUNS]
     header_c = ["#2a2a2a"] + [COLOR[r] for r in RUNS]
 
-    for x, w, h, c in zip(col_x, col_w, headers, header_c):
-        ax.add_patch(Rectangle((x, 0.958), w, 0.038, color=c, alpha=0.12,
-                               transform=ax.transAxes))
-        ax.text(x + 0.006, 0.977, h, fontsize=10.5, fontweight="bold", color=c,
-                va="center", transform=ax.transAxes)
+    ttl_h = TITLE_IN / fig_h
+    hdr_h = HEADER_IN / fig_h
+    band_top = 1 - ttl_h - hdr_h * 0.85
+    for x, h, c in zip(col_x, headers, header_c):
+        ax.add_patch(Rectangle((x, band_top), col_w, hdr_h * 0.72, color=c,
+                               alpha=0.12, transform=ax.transAxes))
+        ax.text(x + 0.006, band_top + hdr_h * 0.36, h, fontsize=10.5, fontweight="bold",
+                color=c, va="center", transform=ax.transAxes)
 
-    wrap_at = max(28, int(46 * 3 / n_cols))
-    y = 0.945
-    row_h = (0.945 - 0.01) / max(n_rows, 1)
-    for step in steps:
-        picked = {r: _pick_samples(data[r]["samples"], step, per_step) for r in RUNS}
-        for i in range(per_step):
-            top = y
-            y -= row_h
-            ax.plot([0, 1], [y + row_h * 0.02, y + row_h * 0.02], color="#dddddd", lw=0.8,
-                    transform=ax.transAxes)
-            if i == 0:
-                ax.text(0.004, top - 0.012, f"step {step}", fontsize=9.5,
-                        fontweight="bold", color="#888", transform=ax.transAxes)
-            offset = 0.030 if i == 0 else 0.006
-            rows = [picked[r][i] if i < len(picked[r]) else None for r in RUNS]
-            opening = next((r["opening"] for r in rows if r), "")
-            ax.text(col_x[0] + 0.006, top - offset, textwrap.fill(opening, wrap_at),
-                    fontsize=8.6, va="top", color="#333", transform=ax.transAxes,
-                    style="italic")
-            for j, rec in enumerate(rows, start=1):
-                if rec is None:
-                    continue
-                score = f"reward {rec['reward']:.2f}"
-                if "judge_score" in rec:
-                    score += f"   |   judge {rec['judge_score']:.2f}/5"
-                ax.text(col_x[j] + 0.006, top - offset, score, fontsize=8.4,
-                        fontweight="bold", color=header_c[j], va="top",
-                        transform=ax.transAxes)
-                ax.text(col_x[j] + 0.006, top - offset - 0.016,
-                        textwrap.fill(rec["completion"][:340] or "(empty)", wrap_at),
-                        fontsize=8.3, va="top", color="#222", transform=ax.transAxes)
-    fig.suptitle("Same prompts, same step: gamed vs. mitigated completions",
-                 fontsize=13, fontweight="bold", y=0.995)
+    y = 1 - ttl_h - hdr_h
+    for row, h_in in zip(layout, heights):
+        h = h_in / fig_h
+        top = y
+        y -= h
+        ax.plot([0, 1], [y, y], color="#dddddd", lw=0.8, transform=ax.transAxes)
+        off = 0.0
+        if row["first"]:
+            ax.text(0.004, top - 0.012, f"step {row['step']}", fontsize=9.5,
+                    fontweight="bold", color="#888", transform=ax.transAxes)
+            off = 0.20 / fig_h
+        ax.text(col_x[0] + 0.006, top - off - 0.004, row["cells"][0], fontsize=8.6,
+                va="top", color="#333", transform=ax.transAxes, style="italic")
+        for j, rec in enumerate(row["recs"], start=1):
+            if rec is None:
+                continue
+            score = f"reward {rec['reward']:.2f}"
+            if "judge_score" in rec:
+                score += f"   |   judge {rec['judge_score']:.2f}/5"
+            ax.text(col_x[j] + 0.006, top - off - 0.004, score, fontsize=8.4,
+                    fontweight="bold", color=header_c[j], va="top", transform=ax.transAxes)
+            ax.text(col_x[j] + 0.006, top - off - 0.004 - (0.22 / fig_h), row["cells"][j],
+                    fontsize=8.3, va="top", color="#222", transform=ax.transAxes)
+
+    ax.text(0.5, 1 - ttl_h * 0.48, "Same prompts, same step: gamed vs. mitigated completions",
+            fontsize=13, fontweight="bold", ha="center", va="center",
+            transform=ax.transAxes)
     fig.savefig(out / "fig5_sample_completions.png")
     plt.close(fig)
 

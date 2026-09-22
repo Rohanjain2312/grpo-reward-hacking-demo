@@ -38,6 +38,7 @@ def _load(cls, name, dtype=None, **kw):
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 BASELINE_REPO = "rohanjain2312/grpo-reward-hacked-sentiment-qwen05b"
 FIXED_REPO = "rohanjain2312/grpo-reward-hacking-fixed-kl-qwen05b"
+CAP_REPO = "rohanjain2312/grpo-reward-hacking-fixed-cap-qwen05b"
 REWARD_MODEL = "lvwerra/distilbert-imdb"
 GITHUB = "https://github.com/Rohanjain2312/grpo-reward-hacking-demo"
 
@@ -60,7 +61,8 @@ if tokenizer.pad_token_id is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 MODELS = {}
-for key, repo in (("base", BASE_MODEL), ("baseline", BASELINE_REPO), ("fixed", FIXED_REPO)):
+for key, repo in (("base", BASE_MODEL), ("baseline", BASELINE_REPO),
+                  ("fixed", FIXED_REPO), ("cap", CAP_REPO)):
     try:
         MODELS[key] = _load(AutoModelForCausalLM, repo, dtype=_dtype).eval()
     except Exception as exc:  # a model repo not published yet should not kill the Space
@@ -93,11 +95,16 @@ def _reward(texts, dev):
     return probs[:, POS_IDX].tolist()
 
 
-@GPU(duration=90)
+ARMS = [("baseline", "Baseline - no constraint (reward hacked)"),
+        ("fixed", "Fixed - KL penalty (beta=0.1)"),
+        ("cap", "Fixed - reward cap at 0.9")]
+
+
+@GPU(duration=120)
 def compare(opening, temperature, max_new_tokens, seed):
     opening = (opening or "").strip()
     if not opening:
-        return "", "", "Enter a review opening first."
+        return "", "", "", "Enter a review opening first."
     dev = _to_device()
     prompt = tokenizer.apply_chat_template(
         [{"role": "user", "content": INSTRUCTION.format(opening=opening)}],
@@ -105,7 +112,7 @@ def compare(opening, temperature, max_new_tokens, seed):
     enc = tokenizer([prompt], return_tensors="pt").to(dev)
 
     outs = {}
-    for key in ("baseline", "fixed"):
+    for key, _ in ARMS:
         if key not in MODELS:
             outs[key] = "(model repo not available)"
             continue
@@ -118,32 +125,33 @@ def compare(opening, temperature, max_new_tokens, seed):
         outs[key] = tokenizer.decode(gen[0][enc["input_ids"].shape[1]:],
                                      skip_special_tokens=True).strip()
 
-    texts = [outs["baseline"] or " ", outs["fixed"] or " "]
+    texts = [outs[k] or " " for k, _ in ARMS]
     r = _reward(texts, dev)
-    fmt = lambda t, s: f"**Sentiment reward: {s:.3f}**\n\n{t}"
-    note = (f"Both continuations came from the same prompt and seed. The reward is "
+    panes = [f"**Sentiment reward: {s:.3f}**\n\n{t}" for t, s in zip(texts, r)]
+    note = (f"All three continuations came from the same prompt and seed. The reward is "
             f"P(positive) from `{REWARD_MODEL}` -- the exact signal the baseline was "
-            f"trained to maximise.")
-    return fmt(outs["baseline"], r[0]), fmt(outs["fixed"], r[1]), note
+            f"trained to maximise. All three runs reached the same reward (0.996) in "
+            f"training; the difference is in the text.")
+    return panes[0], panes[1], panes[2], note
 
 
 FIG_DIR = Path(__file__).parent / "figures"
 FIGS = [
     ("fig1_reward_hacking_diagnosis.png",
-     "The diagnosis: on the baseline run the training reward saturates at 0.996 while "
-     "perplexity under the frozen base model -- a number the policy is never trained on "
-     "-- climbs from 4.47 to 18.14."),
+     "The diagnosis, baseline run. Reward saturates at 0.996 by step 30. Perplexity under "
+     "the frozen base model quadruples (4.47 -> 17.96); an independent 7B LLM judge barely "
+     "moves (4.32 -> 3.93 of 5). Both are shown, because that gap is itself a finding."),
     ("fig2_reward_vs_step.png",
-     "Reward vs. step. Both runs end at the same 0.996; the KL penalty costs nothing in "
-     "reward."),
+     "Reward vs. step. All three runs end at 0.996 - neither mitigation cost any reward."),
     ("fig3_quality_vs_step.png",
-     "Quality vs. step. Baseline perplexity ends at 18.14, the KL-regularised run at 6.42."),
+     "Both independent quality metrics, all three runs. Note the compressed scale on the "
+     "judge panel."),
     ("fig4_secondary_metrics.png",
      "The collapse is ACROSS completions, not within them: unique opening phrases fall "
-     "0.906 -> 0.578 for the baseline, while per-completion distinct-2 reads ~1.0 the whole "
-     "run and sees nothing."),
+     "0.906 -> 0.547 for the baseline, while per-completion distinct-2 reads ~1.0 the whole "
+     "run and sees nothing at all."),
     ("fig5_sample_completions.png",
-     "Raw completions at three checkpoints, chosen deterministically rather than "
+     "Raw completions at three checkpoints, selected deterministically rather than "
      "hand-picked."),
 ]
 
@@ -155,10 +163,13 @@ opening sentence of a negative IMDB review. The reward was `P(positive)` from a 
 pretrained sentiment classifier (`lvwerra/distilbert-imdb`) -- a legitimate reward model,
 not a keyword heuristic.
 
-* **Baseline** got no KL penalty. It found a degenerate way to satisfy the classifier.
-* **Fixed** is the identical run plus a KL penalty against the frozen base policy.
+* **Baseline** got no constraint at all. It found a degenerate way to satisfy the classifier.
+* **Fixed (KL)** is the identical run plus a KL penalty against the frozen base policy.
+* **Fixed (cap)** instead clips the reward at 0.9, so the group advantage goes to zero once
+  everything clears the cap.
 
-Type a review opening below and watch the two policies diverge.
+All three reached the same reward, **0.996**. Type a review opening below and watch them
+diverge anyway.
 Code and full write-up: [{GITHUB}]({GITHUB})
 """
 
@@ -172,17 +183,15 @@ with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo
             temperature = gr.Slider(0.1, 1.5, value=0.7, step=0.05, label="Temperature")
             max_new_tokens = gr.Slider(16, 128, value=48, step=8, label="Max new tokens")
             seed = gr.Number(value=12345, precision=0, label="Seed")
-        run = gr.Button("Generate both continuations", variant="primary")
+        run = gr.Button("Generate all three continuations", variant="primary")
         with gr.Row():
-            with gr.Column():
-                gr.Markdown("### Baseline - GRPO, no KL penalty (reward hacked)")
-                out_base = gr.Markdown()
-            with gr.Column():
-                gr.Markdown("### Fixed - GRPO + KL penalty")
-                out_fixed = gr.Markdown()
+            panes = []
+            for (key, heading), colour in zip(ARMS, ["#c1272d", "#1f6fb4", "#2e8b57"]):
+                with gr.Column():
+                    gr.Markdown(f"### <span style='color:{colour}'>{heading}</span>")
+                    panes.append(gr.Markdown())
         note = gr.Markdown()
-        run.click(compare, [opening, temperature, max_new_tokens, seed],
-                  [out_base, out_fixed, note])
+        run.click(compare, [opening, temperature, max_new_tokens, seed], panes + [note])
     with gr.Tab("Results"):
         for name, caption in FIGS:
             path = FIG_DIR / name
@@ -197,25 +206,47 @@ with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo
 | base model | `{BASE_MODEL}` |
 | reward model | `{REWARD_MODEL}`, reward = P(positive) on the continuation |
 | data | `stanfordnlp/imdb`, negative reviews only, first sentence as the prompt |
-| algorithm | GRPO: 8 prompts/step x group of 8, group-normalised advantages |
-| difference between runs | KL coefficient `beta`: **0.0** (baseline) vs **0.1** (fixed) |
-| steps completed | 80 (of 100 configured; training credits ran out) |
-| final perplexity under frozen base | 18.14 baseline vs 6.42 fixed |
+| algorithm | GRPO: 8 prompts/step x group of 8, group-normalised advantages, 100 steps |
+| the three arms | no constraint / KL penalty `beta=0.1` / reward clipped at 0.9 |
 
-### Why the KL penalty works
+### Results after 100 steps
 
-The sentiment classifier is only a *proxy* for "write a positive review". Maximising it
-without constraint lets the policy walk to a region of text space where the proxy is
-saturated but the text is no longer good writing -- the classifier was never trained on
-inputs like that, so its score there is meaningless. The KL term prices every nat of
-divergence from the frozen base policy, so a move only happens when the reward gain is
-large enough to pay for it. Ordinary improvements in sentiment are cheap; a walk into
-degenerate text is not.
+| metric | step 0 | baseline | KL | cap |
+|---|---|---|---|---|
+| sentiment reward (the training signal) | 0.556 | 0.996 | 0.996 | 0.996 |
+| perplexity under frozen base model | 4.47 | 17.96 | 6.33 | 8.40 |
+| unique opening phrases across eval set | 0.906 | 0.547 | 0.859 | 0.922 |
+| LLM-judge coherence (1-5) | 4.32 | 3.93 | 4.17 | 4.03 |
+| distinct-2 *within* each completion | 0.997 | 0.999 | 1.000 | 1.000 |
+
+### Why the mitigations work
+
+The classifier is a *proxy*. Maximising it without constraint lets the policy walk to a
+region of text space where the proxy is saturated but the text is no longer good writing --
+the classifier was never trained on inputs like that, so its score there is meaningless.
+
+The **KL penalty** prices every nat of divergence from the frozen base policy, so a move
+only happens when the reward gain pays for it. Ordinary improvements in sentiment are
+cheap; a walk into degenerate text is not.
+
+The **reward cap** removes the prize instead: once every sample in a group clears 0.9 their
+rewards are identical, so the group-relative advantage is exactly zero and there is no
+gradient. Simpler and needs no reference model, but blunter -- it constrains the reward,
+not the policy, which is why its perplexity drifts further even though its diversity holds
+up better.
+
+### The metrics that missed it
+
+Per-completion distinct-2 reads ~1.0 for every run at every step: the gamed completions are
+internally varied, and the repetition is *across* samples. The 7B LLM judge scored the
+fully-templated baseline completion 5.00/5 -- the text really is fluent, it is just vacuous,
+and a fluency rubric does not price that.
 
 ### Models
 
 * Reward-hacked: https://huggingface.co/{BASELINE_REPO}
 * KL-regularised: https://huggingface.co/{FIXED_REPO}
+* Reward-capped: https://huggingface.co/{CAP_REPO}
 * Code + write-up: {GITHUB}
 """)
 
