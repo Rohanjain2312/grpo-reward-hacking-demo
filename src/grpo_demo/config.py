@@ -34,6 +34,7 @@ class Config:
     max_grad_norm: float = 1.0
     adv_eps: float = 1e-4
     beta: float = 0.0                  # KL coefficient; 0.0 == no mitigation
+    reward_cap: float | None = None    # clip the reward above this; None == no cap
 
     # --- evaluation -----------------------------------------------------
     eval_every: int = 10
@@ -62,7 +63,18 @@ FIXED_KL = Config(
     hf_repo="rohanjain2312/grpo-reward-hacking-fixed-kl-qwen05b",
 )
 
-CONFIGS = {"baseline": BASELINE, "fixed_kl": FIXED_KL}
+FIXED_CAP = Config(
+    run="fixed_cap",
+    beta=0.0,
+    # 0.9 sits above what a genuinely positive review scores and below the saturation
+    # band (~0.99) the gamed policy chases. Once every completion in a group clears the
+    # cap their rewards are identical, the group-relative advantage goes to zero, and the
+    # policy stops being paid to keep pushing.
+    reward_cap=0.9,
+    hf_repo="rohanjain2312/grpo-reward-hacking-fixed-cap-qwen05b",
+)
+
+CONFIGS = {"baseline": BASELINE, "fixed_kl": FIXED_KL, "fixed_cap": FIXED_CAP}
 
 
 def get_config(name: str, **overrides) -> Config:

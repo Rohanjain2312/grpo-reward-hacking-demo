@@ -3,7 +3,8 @@
 import json
 from pathlib import Path
 
-from .links import BASELINE_REPO, BASELINE_URL, FIXED_REPO, FIXED_URL, GITHUB, SPACE_URL
+from .links import (BASELINE_REPO, BASELINE_URL, CAP_REPO, CAP_URL, FIXED_REPO,
+                    FIXED_URL, GITHUB, SPACE_URL)
 
 _HEADER = """---
 license: apache-2.0
@@ -33,6 +34,19 @@ _DESC = {
         "KL penalty against the frozen base policy. The reward still improves, but the "
         "policy is held close enough to the base model that output quality survives."
     ),
+    "fixed_cap": (
+        "This is the **reward-capping** variant: the same GRPO setup and the same reward "
+        "model, with the sentiment score clipped at 0.9 instead of a KL penalty. Once "
+        "every completion in a group clears the cap their rewards are identical, the "
+        "group-relative advantage collapses to zero, and the policy stops being paid to "
+        "chase saturation."
+    ),
+}
+
+_SIBLINGS = {
+    "baseline": [(FIXED_REPO, FIXED_URL), (CAP_REPO, CAP_URL)],
+    "fixed_kl": [(BASELINE_REPO, BASELINE_URL), (CAP_REPO, CAP_URL)],
+    "fixed_cap": [(BASELINE_REPO, BASELINE_URL), (FIXED_REPO, FIXED_URL)],
 }
 
 
@@ -47,8 +61,7 @@ def _final_metrics(metrics_path: Path):
 
 def model_card(cfg, metrics_path) -> str:
     first, last = _final_metrics(metrics_path)
-    sibling = FIXED_URL if cfg.run == "baseline" else BASELINE_URL
-    sibling_name = FIXED_REPO if cfg.run == "baseline" else BASELINE_REPO
+    siblings = "\n".join(f"  - [{n}]({u})" for n, u in _SIBLINGS[cfg.run])
     rows = ""
     if first and last:
         rows = (
@@ -71,7 +84,7 @@ A three-part demo of reward hacking in GRPO:
 
 - Code and write-up: [{GITHUB}]({GITHUB})
 - Interactive comparison: [Hugging Face Space]({SPACE_URL})
-- The other half of the experiment: [{sibling_name}]({sibling})
+- The other arms of the experiment:\n{siblings}
 
 ## Setup actually used
 
@@ -82,6 +95,7 @@ A three-part demo of reward hacking in GRPO:
 | task | continue the opening sentence of a **negative** IMDB review |
 | algorithm | GRPO, group size {cfg.group_size}, {cfg.prompts_per_step} prompts/step |
 | KL coefficient (beta) | **{cfg.beta}** |
+| reward cap | **{cfg.reward_cap if cfg.reward_cap is not None else 'none'}** |
 | steps actually completed | {cfg.total_steps} |
 | learning rate | {cfg.learning_rate} |
 | max new tokens | {cfg.max_new_tokens} |

@@ -16,10 +16,16 @@ from matplotlib.patches import Rectangle
 from .config import CONFIGS
 from .quality import cross_sample_diversity
 
-RUNS = ["baseline", "fixed_kl"]
-LABEL = {"baseline": "Baseline (no KL) - gamed", "fixed_kl": "Fixed (KL penalty, beta=0.1)"}
-COLOR = {"baseline": "#c1272d", "fixed_kl": "#1f6fb4"}
-MARKER = {"baseline": "o", "fixed_kl": "s"}
+ALL_RUNS = ["baseline", "fixed_kl", "fixed_cap"]
+LABEL = {"baseline": "Baseline (no KL) - gamed",
+         "fixed_kl": "Fixed (KL penalty, beta=0.1)",
+         "fixed_cap": "Fixed (reward cap at 0.9)"}
+COLOR = {"baseline": "#c1272d", "fixed_kl": "#1f6fb4", "fixed_cap": "#2e8b57"}
+MARKER = {"baseline": "o", "fixed_kl": "s", "fixed_cap": "^"}
+
+# Only runs that actually have results are plotted, so the reward-cap arm appears
+# automatically once it has been run and is silently absent until then.
+RUNS = list(ALL_RUNS)
 
 plt.rcParams.update({
     "figure.dpi": 160,
@@ -229,69 +235,72 @@ def _pick_samples(records, step, n=2):
 
 
 def fig_samples(data, out: Path, steps=None, per_step=2):
-    """Side-by-side raw completions with their reward and judge score."""
-    all_steps = sorted(data["baseline"]["judge"] or
-                       {r["step"] for r in data["baseline"]["samples"]})
+    """Side-by-side raw completions with their reward (and judge score, when present)."""
+    base = data["baseline"]
+    all_steps = sorted(base["judge"] or {r["step"] for r in base["samples"]})
     if steps is None:
         steps = [all_steps[0], all_steps[len(all_steps) // 2], all_steps[-1]] if all_steps else []
     if not steps:
         return
 
+    cols = ["prompt"] + [r for r in RUNS]
+    n_cols = len(cols)
     n_rows = len(steps) * per_step
+    fig_w = 4.4 * n_cols
     fig_h = 1.15 + 1.62 * n_rows
-    fig, ax = plt.subplots(figsize=(13.2, fig_h))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     fig.subplots_adjust(left=0, right=1, top=0.965, bottom=0.005)
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    col_x = [0.005, 0.345, 0.675]
-    col_w = [0.335, 0.325, 0.325]
-    headers = ["Review opening (prompt)", LABEL["baseline"], LABEL["fixed_kl"]]
-    header_c = ["#2a2a2a", COLOR["baseline"], COLOR["fixed_kl"]]
+    gap = 0.008
+    col_w = [(1.0 - gap * n_cols) / n_cols] * n_cols
+    col_x, acc = [], 0.004
+    for w in col_w:
+        col_x.append(acc)
+        acc += w + gap
+    headers = ["Review opening (prompt)"] + [LABEL[r] for r in RUNS]
+    header_c = ["#2a2a2a"] + [COLOR[r] for r in RUNS]
+
     for x, w, h, c in zip(col_x, col_w, headers, header_c):
         ax.add_patch(Rectangle((x, 0.958), w, 0.038, color=c, alpha=0.12,
                                transform=ax.transAxes))
-        ax.text(x + 0.008, 0.977, h, fontsize=10.5, fontweight="bold", color=c,
+        ax.text(x + 0.006, 0.977, h, fontsize=10.5, fontweight="bold", color=c,
                 va="center", transform=ax.transAxes)
 
+    wrap_at = max(28, int(46 * 3 / n_cols))
     y = 0.945
     row_h = (0.945 - 0.01) / max(n_rows, 1)
     for step in steps:
-        base_rows = _pick_samples(data["baseline"]["samples"], step, per_step)
-        fix_rows = _pick_samples(data["fixed_kl"]["samples"], step, per_step)
+        picked = {r: _pick_samples(data[r]["samples"], step, per_step) for r in RUNS}
         for i in range(per_step):
-            b = base_rows[i] if i < len(base_rows) else None
-            f = fix_rows[i] if i < len(fix_rows) else None
             top = y
             y -= row_h
             ax.plot([0, 1], [y + row_h * 0.02, y + row_h * 0.02], color="#dddddd", lw=0.8,
                     transform=ax.transAxes)
             if i == 0:
-                ax.text(0.005, top - 0.012, f"step {step}", fontsize=9.5,
+                ax.text(0.004, top - 0.012, f"step {step}", fontsize=9.5,
                         fontweight="bold", color="#888", transform=ax.transAxes)
-            opening = (b or f or {}).get("opening", "")
-            cells = [opening, b, f]
-            for j, (x, w) in enumerate(zip(col_x, col_w)):
-                offset = 0.030 if i == 0 else 0.006
-                if j == 0:
-                    ax.text(x + 0.008, top - offset,
-                            textwrap.fill(opening, 46), fontsize=8.6, va="top",
-                            color="#333", transform=ax.transAxes, style="italic")
-                else:
-                    rec = cells[j]
-                    if rec is None:
-                        continue
-                    body = textwrap.fill(rec["completion"][:340] or "(empty)", 46)
-                    score = f"reward {rec['reward']:.2f}"
-                    if "judge_score" in rec:
-                        score += f"   |   judge {rec['judge_score']:.2f}/5"
-                    ax.text(x + 0.008, top - offset, score, fontsize=8.4,
-                            fontweight="bold", color=header_c[j], va="top",
-                            transform=ax.transAxes)
-                    ax.text(x + 0.008, top - offset - 0.016, body, fontsize=8.3, va="top",
-                            color="#222", transform=ax.transAxes)
-    fig.suptitle("Same prompts, same step: gamed vs. KL-regularised completions",
+            offset = 0.030 if i == 0 else 0.006
+            rows = [picked[r][i] if i < len(picked[r]) else None for r in RUNS]
+            opening = next((r["opening"] for r in rows if r), "")
+            ax.text(col_x[0] + 0.006, top - offset, textwrap.fill(opening, wrap_at),
+                    fontsize=8.6, va="top", color="#333", transform=ax.transAxes,
+                    style="italic")
+            for j, rec in enumerate(rows, start=1):
+                if rec is None:
+                    continue
+                score = f"reward {rec['reward']:.2f}"
+                if "judge_score" in rec:
+                    score += f"   |   judge {rec['judge_score']:.2f}/5"
+                ax.text(col_x[j] + 0.006, top - offset, score, fontsize=8.4,
+                        fontweight="bold", color=header_c[j], va="top",
+                        transform=ax.transAxes)
+                ax.text(col_x[j] + 0.006, top - offset - 0.016,
+                        textwrap.fill(rec["completion"][:340] or "(empty)", wrap_at),
+                        fontsize=8.3, va="top", color="#222", transform=ax.transAxes)
+    fig.suptitle("Same prompts, same step: gamed vs. mitigated completions",
                  fontsize=13, fontweight="bold", y=0.995)
     fig.savefig(out / "fig5_sample_completions.png")
     plt.close(fig)
@@ -301,42 +310,40 @@ def samples_markdown(data, results_dir: Path, steps=None, per_step=2) -> str:
     all_steps = sorted({r["step"] for r in data["baseline"]["samples"]})
     if steps is None:
         steps = [all_steps[0], all_steps[len(all_steps) // 2], all_steps[-1]]
+
+    def cell(r):
+        if r is None:
+            return ""
+        txt = r["completion"].replace("|", "\\|").replace("\n", " ")[:300]
+        tag = f"**reward {r['reward']:.2f}"
+        tag += f" / judge {r['judge_score']:.2f}**" if "judge_score" in r else "**"
+        return f"{tag}<br>{txt}"
+
     lines = []
     for step in steps:
         lines.append(f"\n#### Step {step}\n")
-        lines.append("| | Baseline (no KL) | Fixed (KL) |")
-        lines.append("|---|---|---|")
-        b_rows = _pick_samples(data["baseline"]["samples"], step, per_step)
-        f_rows = _pick_samples(data["fixed_kl"]["samples"], step, per_step)
+        lines.append("| | " + " | ".join(LABEL[r] for r in RUNS) + " |")
+        lines.append("|" + "---|" * (len(RUNS) + 1))
+        picked = {r: _pick_samples(data[r]["samples"], step, per_step) for r in RUNS}
         for i in range(per_step):
-            b = b_rows[i] if i < len(b_rows) else None
-            f = f_rows[i] if i < len(f_rows) else None
-            if b is None and f is None:
+            rows = [picked[r][i] if i < len(picked[r]) else None for r in RUNS]
+            if not any(rows):
                 continue
-            opening = (b or f)["opening"]
-
-            def cell(r):
-                if r is None:
-                    return ""
-                txt = r["completion"].replace("|", "\\|").replace("\n", " ")[:300]
-                tag = f"**reward {r['reward']:.2f}"
-                if "judge_score" in r:
-                    tag += f" / judge {r['judge_score']:.2f}**"
-                else:
-                    tag += "**"
-                return f"{tag}<br>{txt}"
-
-            lines.append(f"| *{opening.replace('|', chr(92) + '|')}* | {cell(b)} | {cell(f)} |")
+            opening = next(r["opening"] for r in rows if r).replace("|", "\\|")
+            lines.append(f"| *{opening}* | " + " | ".join(cell(r) for r in rows) + " |")
     return "\n".join(lines)
 
 
 def main():
+    global RUNS
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-dir", default="results")
     ap.add_argument("--out", default="figures")
     args = ap.parse_args()
     results_dir, out = Path(args.results_dir), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    RUNS = [r for r in ALL_RUNS if (results_dir / r / "metrics.jsonl").exists()]
+    print("runs found:", ", ".join(RUNS))
     data = {run: load_run(run, results_dir) for run in RUNS}
 
     fig_diagnosis(data, out)

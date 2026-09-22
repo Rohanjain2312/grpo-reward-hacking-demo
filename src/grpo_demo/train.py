@@ -238,7 +238,12 @@ def train(cfg, push: bool = True):
         policy.train()
 
         texts = decode(tokenizer, c_ids, c_mask)
-        rewards = reward_fn.score(texts).to(device)
+        raw_rewards = reward_fn.score(texts).to(device)
+        # Reward capping: the second mitigation. Clipping the score flattens the reward
+        # inside a group once everything clears the cap, which zeroes the advantage and
+        # removes the incentive to keep chasing saturation.
+        rewards = (raw_rewards if cfg.reward_cap is None
+                   else raw_rewards.clamp(max=cfg.reward_cap))
 
         grouped = rewards.view(cfg.prompts_per_step, cfg.group_size)
         mean = grouped.mean(dim=1, keepdim=True)
@@ -274,8 +279,9 @@ def train(cfg, push: bool = True):
         denom = float(total_tokens)
         row = {
             "step": step,
-            "train_reward": float(rewards.mean()),
-            "train_reward_std": float(rewards.std()),
+            "train_reward": float(raw_rewards.mean()),   # always the uncapped score
+            "train_reward_std": float(raw_rewards.std()),
+            "train_reward_used": float(rewards.mean()),  # what the advantage saw
             "kl": kl_sum / denom,
             "pg_loss": pg_sum / denom,
             "grad_norm": float(grad_norm),
@@ -315,9 +321,11 @@ def train(cfg, push: bool = True):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", required=True, choices=["baseline", "fixed_kl"])
+    ap.add_argument("--config", required=True,
+                    choices=["baseline", "fixed_kl", "fixed_cap"])
     ap.add_argument("--total-steps", type=int)
     ap.add_argument("--beta", type=float)
+    ap.add_argument("--reward-cap", type=float)
     ap.add_argument("--learning-rate", type=float)
     ap.add_argument("--prompts-per-step", type=int)
     ap.add_argument("--group-size", type=int)
