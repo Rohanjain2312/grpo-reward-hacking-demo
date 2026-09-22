@@ -107,9 +107,11 @@ final model at the repo root. The temporary self-test repo was deleted afterward
 | lr/steps pilot | done |
 | KL coefficient sweep (beta 0.04 / 0.1 / 0.3) | done |
 | Hub resume verified bit-exact | done |
-| baseline run | done (80/100 steps; credits ran out) |
-| fixed run | done (80/100 steps; credits ran out) |
-| judge pass | **not run** - no GPU credits; code written + sanity-gated |
+| baseline run | done, 100 steps (resumed from step 80 on Colab) |
+| fixed_kl run | done, 100 steps (resumed from step 80 on Colab) |
+| fixed_cap run | done, 100 steps (reward-capping arm, Colab) |
+| notebook executed end-to-end in Colab | done |
+| judge pass | done on Colab A100; sanity gate PASSED; 2112 samples scored |
 | figures | done (5 PNGs in figures/) |
 | README | done |
 | GitHub push + description + 5 topics | done |
@@ -177,19 +179,16 @@ automatically:
 ```
 
 
-## Outstanding: Space hardware (one click, needs the account owner)
+## Resolved: Space hardware
 
-The Space is live and correct, but it runs on **ZeroGPU** hardware whose free quota is
-exhausted, so a visitor sees *"You have exceeded your ZeroGPU runs limit"* instead of
-completions. The figures and method tabs work fine; only live generation is blocked.
+The Space originally ran on **ZeroGPU**, whose free quota was exhausted, so visitors saw
+*"You have exceeded your ZeroGPU runs limit"* instead of completions. The account owner
+switched it to **`CPU basic` (free)**; live generation was then verified end to end in a
+browser, with all three models returning completions and reward scores in ~40 s.
 
-Fix, in the Space's **Settings -> Hardware**: switch from `ZeroGPU` to **`CPU basic` (free)**.
-The app already detects CPU automatically (`spaces` is not installed, so it takes the
-plain-CPU path) and three 0.5B models generate in roughly 20-40 s there.
-
-This cannot be done with the current token: `POST /api/spaces/.../hardware` returns 401
-`Invalid username or password` while file uploads with the same token succeed, so the token
-lacks the manage-spaces permission.
+The hardware change could not be made with the session's token: both
+`POST /api/spaces/.../hardware` and `restart_space` return 401 while file uploads with the
+same token succeed, so it lacks the manage-spaces permission.
 
 ### Space debugging notes (gradio 6.28 on Spaces)
 
