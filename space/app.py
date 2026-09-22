@@ -6,6 +6,7 @@ same sentiment classifier that was used as the training reward scores each conti
 
 import json
 import os
+import traceback
 from pathlib import Path
 
 import gradio as gr
@@ -14,10 +15,10 @@ from transformers import (AutoModelForCausalLM, AutoModelForSequenceClassificati
                           AutoTokenizer)
 
 try:
-    import spaces  # ZeroGPU
+    import spaces  # ZeroGPU, when the Space is configured for it
     GPU = spaces.GPU
     ZERO = True
-except Exception:  # running on CPU hardware or locally
+except Exception:  # CPU hardware or local: GPU() below is a no-op decorator
     ZERO = False
     def GPU(*a, **k):
         def deco(fn):
@@ -54,15 +55,17 @@ EXAMPLES = [
     "Every single performance in this movie feels phoned in.",
 ]
 
-_dtype = torch.float16 if torch.cuda.is_available() or ZERO else torch.float32
+# ZeroGPU forbids initialising CUDA in the main process, so no torch.cuda.*
+# calls at import: the dtype is decided from whether we are on ZeroGPU alone.
+_dtype = torch.float16 if ZERO else torch.float32
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 tokenizer.padding_side = "left"
 if tokenizer.pad_token_id is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 MODELS = {}
-for key, repo in (("base", BASE_MODEL), ("baseline", BASELINE_REPO),
-                  ("fixed", FIXED_REPO), ("cap", CAP_REPO)):
+for key, repo in (("baseline", BASELINE_REPO), ("fixed", FIXED_REPO),
+                  ("cap", CAP_REPO)):
     try:
         MODELS[key] = _load(AutoModelForCausalLM, repo, dtype=_dtype).eval()
     except Exception as exc:  # a model repo not published yet should not kill the Space
@@ -77,8 +80,9 @@ _on_gpu = {"done": False}
 
 
 def _to_device():
+    """Resolve the device and place the models. Only ever called inside @GPU."""
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    if _on_gpu["done"] and dev == "cpu":
+    if dev == "cpu" and _on_gpu["done"]:
         return dev
     for m in MODELS.values():
         m.to(dev)
@@ -101,10 +105,20 @@ ARMS = [("baseline", "Baseline - no constraint (reward hacked)"),
 
 
 @GPU(duration=120)
+def _num(value, default, cast=float):
+    try:
+        return cast(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def compare(opening, temperature, max_new_tokens, seed):
     opening = (opening or "").strip()
     if not opening:
         return "", "", "", "Enter a review opening first."
+    temperature = _num(temperature, 0.7, float)
+    max_new_tokens = _num(max_new_tokens, 48, int)
+    seed = _num(seed, 12345, int)
     dev = _to_device()
     prompt = tokenizer.apply_chat_template(
         [{"role": "user", "content": INSTRUCTION.format(opening=opening)}],
@@ -116,7 +130,7 @@ def compare(opening, temperature, max_new_tokens, seed):
         if key not in MODELS:
             outs[key] = "(model repo not available)"
             continue
-        torch.manual_seed(int(seed))
+        torch.manual_seed(seed)
         with torch.no_grad():
             gen = MODELS[key].generate(
                 **enc, do_sample=True, temperature=float(temperature), top_p=0.95,
@@ -156,9 +170,9 @@ FIGS = [
 ]
 
 INTRO = f"""
-# Reward hacking in GRPO, and the one-line fix
+# Reward hacking in GRPO, and two ways to fix it
 
-Two copies of `Qwen/Qwen2.5-0.5B-Instruct` were trained with **GRPO** to continue the
+Three copies of `Qwen/Qwen2.5-0.5B-Instruct` were trained with **GRPO** to continue the
 opening sentence of a negative IMDB review. The reward was `P(positive)` from a real
 pretrained sentiment classifier (`lvwerra/distilbert-imdb`) -- a legitimate reward model,
 not a keyword heuristic.
@@ -173,17 +187,29 @@ diverge anyway.
 Code and full write-up: [{GITHUB}]({GITHUB})
 """
 
-with gr.Blocks(title="GRPO reward hacking demo", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="GRPO reward hacking demo") as demo:
     gr.Markdown(INTRO)
-    with gr.Tab("Compare the two policies"):
+    with gr.Tab("Compare the three policies"):
         opening = gr.Textbox(label="Opening sentence of a movie review", lines=2,
                              value=EXAMPLES[0])
-        gr.Examples(examples=[[e] for e in EXAMPLES], inputs=[opening])
+        # A plain Dropdown rather than gr.Examples: on gradio 6 the Examples dataset
+        # component sends the example's text where it expects an index, and because it
+        # fires on page load it leaves the whole UI in an error state.
+        picker = gr.Dropdown(choices=EXAMPLES, value=EXAMPLES[0],
+                             label="...or pick an example")
+        picker.change(lambda choice: choice, [picker], [opening])
+        # Dropdowns/textboxes rather than Slider/Number: gradio 6.28 sends the numeric
+        # widgets' values as strings and its own preprocess() then raises on them, so the
+        # values are taken as text and parsed in `compare` instead.
         with gr.Row():
-            temperature = gr.Slider(0.1, 1.5, value=0.7, step=0.05, label="Temperature")
-            max_new_tokens = gr.Slider(16, 128, value=48, step=8, label="Max new tokens")
-            seed = gr.Number(value=12345, precision=0, label="Seed")
+            temperature = gr.Dropdown(choices=["0.3", "0.5", "0.7", "0.9", "1.1"],
+                                      value="0.7", label="Temperature")
+            max_new_tokens = gr.Dropdown(choices=["32", "48", "64", "96", "128"],
+                                         value="48", label="Max new tokens")
+            seed = gr.Textbox(value="12345", label="Seed")
         run = gr.Button("Generate all three continuations", variant="primary")
+        gr.Markdown("*Runs on free CPU hardware - the three generations take "
+                    "around 20-40 seconds.*")
         with gr.Row():
             panes = []
             for (key, heading), colour in zip(ARMS, ["#c1272d", "#1f6fb4", "#2e8b57"]):

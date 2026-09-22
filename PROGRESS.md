@@ -175,3 +175,32 @@ automatically:
 ./scripts/run_on_hf_jobs.sh baseline
 ./scripts/run_on_hf_jobs.sh fixed_kl
 ```
+
+
+## Outstanding: Space hardware (one click, needs the account owner)
+
+The Space is live and correct, but it runs on **ZeroGPU** hardware whose free quota is
+exhausted, so a visitor sees *"You have exceeded your ZeroGPU runs limit"* instead of
+completions. The figures and method tabs work fine; only live generation is blocked.
+
+Fix, in the Space's **Settings -> Hardware**: switch from `ZeroGPU` to **`CPU basic` (free)**.
+The app already detects CPU automatically (`spaces` is not installed, so it takes the
+plain-CPU path) and three 0.5B models generate in roughly 20-40 s there.
+
+This cannot be done with the current token: `POST /api/spaces/.../hardware` returns 401
+`Invalid username or password` while file uploads with the same token succeed, so the token
+lacks the manage-spaces permission.
+
+### Space debugging notes (gradio 6.28 on Spaces)
+
+Three separate defects had to be fixed, all masked behind an empty `{"error": null}`:
+
+1. `gr.Slider` / `gr.Number` raise in `preprocess()` when the browser sends their value as a
+   string, which gradio 6.28 does. Replaced with `gr.Dropdown` / `gr.Textbox` and parsed
+   in-app.
+2. `gr.Examples` sends the example's *text* where its dataset component expects an *index*,
+   and because it fires on page load it left the whole UI in an error state so no later
+   event reached the backend. Replaced with a plain `gr.Dropdown`.
+3. The remaining failure was the ZeroGPU quota above, whose message only appears when the
+   request carries the correct `fn_index` (the Examples handler was index 0, `compare` is
+   index 1).

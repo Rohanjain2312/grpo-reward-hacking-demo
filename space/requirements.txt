@@ -1,7 +1,9 @@
-spaces
+# Runs on free CPU hardware. `spaces` (ZeroGPU) is deliberately NOT installed: with it
+# present the app takes the ZeroGPU path, which failed on this Space with an opaque
+# empty error. Three 0.5B models on CPU are fast enough for a demo.
+# gradio is supplied by the Space SDK and must not be pinned here.
 torch
 transformers>=4.56
-gradio>=5.0
 accelerate
 huggingface_hub
 packaging
